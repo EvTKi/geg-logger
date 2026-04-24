@@ -1,0 +1,7 @@
+{
+  "logging": {
+    "level": "INFO",
+    "can_file_write": true,
+    "can_terminal_write": true
+  }
+}
