@@ -1,5 +1,5 @@
 """
-Модуль логирования для проекта AutoGenInstall2 с поддержкой .exe режима
+Модуль логирования для проекта AutoGenInstall2 с поддержрой .exe режима
 Автоматическое использование имени логгера как module_name
 """
 
@@ -49,60 +49,58 @@ class CustomFormatter(logging.Formatter):
 
 def _get_appsettings_path() -> Path:
     """
-    Получить правильный путь к appsettings.json в .exe и режиме разработки
+    Получить правильный путь к appsettings.json
+    Приоритет: текущая директория > директория .exe > домашняя директория
     """
-    # Проверяем, запущены ли мы в .exe режиме
+    # 1. В текущей рабочей директории (самый важный приоритет)
+    cwd_path = Path.cwd() / "appsettings.json"
+    if cwd_path.exists():
+        return cwd_path.resolve()
+    
+    # 2. Проверяем, запущены ли мы в .exe режиме
     if getattr(sys, "frozen", False):
-        # Режим .exe
+        # Режим .exe - рядом с .exe файлом
         exe_dir = Path(sys.executable).parent
-
-        # Пробуем найти рядом с .exe
-        possible_paths = [
-            exe_dir / "appsettings.json",
-            exe_dir / "appsettings.Production.json",
-        ]
-
-        # Пробуем найти во временной папке PyInstaller
+        exe_path = exe_dir / "appsettings.json"
+        if exe_path.exists():
+            return exe_path.resolve()
+        
+        # Временная папка PyInstaller
         if hasattr(sys, "_MEIPASS"):
-            meipass_dir = Path(sys._MEIPASS)
-            possible_paths.extend(
-                [
-                    meipass_dir / "appsettings.json",
-                    meipass_dir / "appsettings.Production.json",
-                ],
-            )
-    else:
-        # Режим разработки
-        project_root = Path(__file__).parent.parent
-
-        possible_paths = [
-            project_root / "appsettings.json",
-            project_root / "appsettings.Production.json",
-            Path.cwd() / "appsettings.json",
-            Path.cwd() / "appsettings.Production.json",
-        ]
-
-    # Ищем существующий файл
-    for path in possible_paths:
-        if path.exists():
-            return path.resolve()
-
-    # Если файл не найден, возвращаем путь по умолчанию
-    return Path(__file__).parent.parent / "appsettings.json"
+            meipass_path = Path(sys._MEIPASS) / "appsettings.json"
+            if meipass_path.exists():
+                return meipass_path.resolve()
+    
+    # 3. В директории проекта (ищем pyproject.toml или .git как маркеры)
+    current = Path.cwd()
+    for parent in [current] + list(current.parents):
+        markers = ["pyproject.toml", ".git", "setup.py", "requirements.txt"]
+        if any((parent / marker).exists() for marker in markers):
+            project_path = parent / "appsettings.json"
+            if project_path.exists():
+                return project_path.resolve()
+            break
+    
+    # 4. В домашней директории пользователя
+    home_path = Path.home() / ".my_logger" / "appsettings.json"
+    if home_path.exists():
+        return home_path.resolve()
+    
+    # 5. Возвращаем путь в текущей директории (даже если файла нет - создадим)
+    return Path.cwd() / "appsettings.json"
 
 
 def _get_log_directory() -> Path:
     """
-    Получить правильную директорию для логов в .exe и режиме разработки
+    Получить правильную директорию для логов
     """
     if getattr(sys, "frozen", False):
         # Режим .exe - логи рядом с .exe файлом
         exe_dir = Path(sys.executable).parent
         log_dir = exe_dir / "logs"
     else:
-        # Режим разработки - логи в проекте
-        project_root = Path(__file__).parent.parent.parent
-        log_dir = project_root / "logs"
+        # Режим разработки - логи в текущей рабочей директории
+        log_dir = Path.cwd() / "logs"
 
     # Создаем директорию, если её нет
     log_dir.mkdir(exist_ok=True)
@@ -121,7 +119,7 @@ class _Logger:
 
     @classmethod
     def _load_config(cls) -> dict[str, Any]:
-        """Загрузка настроек логирования из appsettings.json с учетом .exe режима"""
+        """Загрузка настроек логирования из appsettings.json"""
         if cls._logging_config is not None:
             return cls._logging_config
 
@@ -399,7 +397,7 @@ class _Logger:
 
 
 class Logger(_Logger):
-    """Глобальный логгер """
+    """Глобальный логгер"""
 
     def __init__(self, name: str):
         """
