@@ -7,7 +7,6 @@ import json
 import logging
 import sys
 import traceback
-
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -56,7 +55,7 @@ def _get_appsettings_path() -> Path:
     cwd_path = Path.cwd() / "appsettings.json"
     if cwd_path.exists():
         return cwd_path.resolve()
-    
+
     # 2. Проверяем, запущены ли мы в .exe режиме
     if getattr(sys, "frozen", False):
         # Режим .exe - рядом с .exe файлом
@@ -64,13 +63,13 @@ def _get_appsettings_path() -> Path:
         exe_path = exe_dir / "appsettings.json"
         if exe_path.exists():
             return exe_path.resolve()
-        
+
         # Временная папка PyInstaller
         if hasattr(sys, "_MEIPASS"):
             meipass_path = Path(sys._MEIPASS) / "appsettings.json"
             if meipass_path.exists():
                 return meipass_path.resolve()
-    
+
     # 3. В директории проекта (ищем pyproject.toml или .git как маркеры)
     current = Path.cwd()
     for parent in [current] + list(current.parents):
@@ -80,12 +79,12 @@ def _get_appsettings_path() -> Path:
             if project_path.exists():
                 return project_path.resolve()
             break
-    
+
     # 4. В домашней директории пользователя
-    home_path = Path.home() / ".my_logger" / "appsettings.json"
+    home_path = Path.home() / ".geg_logger" / "appsettings.json"
     if home_path.exists():
         return home_path.resolve()
-    
+
     # 5. Возвращаем путь в текущей директории (даже если файла нет - создадим)
     return Path.cwd() / "appsettings.json"
 
@@ -305,7 +304,7 @@ class _Logger:
         extra = {"module_name": self.name}
         self.logger.warning(message, extra=extra)
 
-    def error(self, message: str, exc_info: bool | Exception = None):
+    def error(self, message: str, exc_info: bool | Exception | None = None):
         """
         Логирование уровня ERROR - автоматически использует имя логгера как module_name
         Stacktrace добавляется автоматически, если он доступен.
@@ -316,35 +315,52 @@ class _Logger:
         """
         extra = {"module_name": self.name}
 
+        # Определяем, нужно ли добавлять stacktrace и какое именно исключение использовать
+        should_add_stacktrace = False
+        exception_to_use = None
+
+        # Если exc_info явно передан как Exception
+        if isinstance(exc_info, Exception):
+            should_add_stacktrace = True
+            exception_to_use = exc_info
+        # Если exc_info явно передан как True
+        elif exc_info is True:
+            should_add_stacktrace = True
+            exception_to_use = True
         # Если exc_info не указан, проверяем наличие активного исключения
-        exc_info = bool(exc_info is None and sys.exc_info()[0] is not None)
+        elif exc_info is None and sys.exc_info()[0] is not None:
+            should_add_stacktrace = True
+            exception_to_use = True
+        # Если exc_info явно False или None без активного исключения
+        else:
+            should_add_stacktrace = False
 
         # Добавляем stacktrace для ошибок, если это разрешено в настройках
-        if self._include_stacktrace and exc_info:
-            if exc_info is True:
+        if self._include_stacktrace and should_add_stacktrace:
+            if exception_to_use is True:
                 stacktrace_str = traceback.format_exc()
                 if stacktrace_str and stacktrace_str != "NoneType: None\n":
                     extra["stacktrace"] = stacktrace_str
                     self.logger.error(message, extra=extra)
                     return
-            elif isinstance(exc_info, Exception):
+            elif isinstance(exception_to_use, Exception):
                 stacktrace_str = "".join(
                     traceback.format_exception(
-                        type(exc_info),
-                        exc_info,
-                        exc_info.__traceback__,
+                        type(exception_to_use),
+                        exception_to_use,
+                        exception_to_use.__traceback__,
                     ),
                 )
                 extra["stacktrace"] = stacktrace_str
                 self.logger.error(message, extra=extra)
                 return
-            elif exc_info:
+            elif exception_to_use:
                 self.logger.error(message, extra=extra, exc_info=True)
                 return
 
         self.logger.error(message, extra=extra)
 
-    def critical(self, message: str, exc_info: bool | Exception = None):
+    def critical(self, message: str, exc_info: bool | Exception | None = None):
         """
         Логирование уровня CRITICAL - автоматически использует имя логгера как module_name
         Stacktrace добавляется автоматически, если он доступен.
@@ -355,30 +371,46 @@ class _Logger:
         """
         extra = {"module_name": self.name}
 
+        # Определяем, нужно ли добавлять stacktrace и какое именно исключение использовать
+        should_add_stacktrace = False
+        exception_to_use = None
+
+        # Если exc_info явно передан как Exception
+        if isinstance(exc_info, Exception):
+            should_add_stacktrace = True
+            exception_to_use = exc_info
+        # Если exc_info явно передан как True
+        elif exc_info is True:
+            should_add_stacktrace = True
+            exception_to_use = True
         # Если exc_info не указан, проверяем наличие активного исключения
-        if exc_info is None:
-            exc_info = sys.exc_info()[0] is not None
+        elif exc_info is None and sys.exc_info()[0] is not None:
+            should_add_stacktrace = True
+            exception_to_use = True
+        # Если exc_info явно False или None без активного исключения
+        else:
+            should_add_stacktrace = False
 
         # Добавляем stacktrace для ошибок, если это разрешено в настройках
-        if self._include_stacktrace and exc_info:
-            if exc_info is True:
+        if self._include_stacktrace and should_add_stacktrace:
+            if exception_to_use is True:
                 stacktrace_str = traceback.format_exc()
                 if stacktrace_str and stacktrace_str != "NoneType: None\n":
                     extra["stacktrace"] = stacktrace_str
                     self.logger.critical(message, extra=extra)
                     return
-            elif isinstance(exc_info, Exception):
+            elif isinstance(exception_to_use, Exception):
                 stacktrace_str = "".join(
                     traceback.format_exception(
-                        type(exc_info),
-                        exc_info,
-                        exc_info.__traceback__,
+                        type(exception_to_use),
+                        exception_to_use,
+                        exception_to_use.__traceback__,
                     ),
                 )
                 extra["stacktrace"] = stacktrace_str
                 self.logger.critical(message, extra=extra)
                 return
-            elif exc_info:
+            elif exception_to_use:
                 self.logger.critical(message, extra=extra, exc_info=True)
                 return
 
